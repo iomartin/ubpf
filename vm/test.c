@@ -28,6 +28,10 @@
 #include <math.h>
 #include "ubpf.h"
 
+#ifdef ROCKSDB
+#include "rocksdb/c_sst_utils.h"
+#endif
+
 void ubpf_set_register_offset(int x);
 static void *readfile(const char *path, size_t maxlen, size_t *len);
 static void register_functions(struct ubpf_vm *vm);
@@ -233,4 +237,10 @@ register_functions(struct ubpf_vm *vm)
     ubpf_register(vm, 2, "trash_registers", trash_registers);
     ubpf_register(vm, 3, "sqrti", sqrti);
     ubpf_register(vm, 4, "strcmp_ext", strcmp);
+#ifdef ROCKSDB
+    ubpf_register(vm, 5, "CreateSSTUtils", CreateSSTUtils);
+    ubpf_register(vm, 6, "Init", Init);
+    ubpf_register(vm, 7, "Find", Find);
+    ubpf_register(vm, 8, "AddFile", AddFile);
+#endif
 }

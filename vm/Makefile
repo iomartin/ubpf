@@ -33,6 +33,11 @@ ifeq ($(DEBUG),1)
 CFLAGS += -DDEBUG
 endif
 
+ifeq ($(ROCKSDB),1)
+CFLAGS += -DROCKSDB
+LDLIBS += -lrocksdb -lpthread -lrt -lsnappy -lgflags -lz -lbz2 -llz4 -lzstd
+endif
+
 all: libubpf.a test
 
 ubpf_jit_x86_64.o: ubpf_jit_x86_64.c ubpf_jit_x86_64.h
@@ -41,6 +46,7 @@ libubpf.a: ubpf_vm.o ubpf_jit_x86_64.o ubpf_loader.o
 	ar rc $@ $^
 
 test: test.o libubpf.a
+	clang++ $^ -o $@ $(LDLIBS)
 
 install:
 	$(INSTALL) -d $(DESTDIR)$(PREFIX)/lib
