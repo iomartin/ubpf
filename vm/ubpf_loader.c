@@ -182,10 +182,14 @@ ubpf_load_elf(struct ubpf_vm *vm, const void *elf, size_t elf_size, char **errms
         for (j = 0; j < rel->size/sizeof(Elf64_Rel); j++) {
             const Elf64_Rel *r = &rs[j];
 
-            if (ELF64_R_TYPE(r->r_info) != 2) {
+            if (ELF64_R_TYPE(r->r_info) == 1)
+                continue;
+
+            if (ELF64_R_TYPE(r->r_info) != 10) {
                 *errmsg = ubpf_error("bad relocation type %u", ELF64_R_TYPE(r->r_info));
                 goto error;
             }
+
 
             uint32_t sym_idx = ELF64_R_SYM(r->r_info);
             if (sym_idx >= num_syms) {
