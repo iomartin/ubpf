@@ -29,6 +29,8 @@ struct ebpf_inst {
     int32_t imm;
 };
 
+#define EBPF_ARGS_REGS_NUM 5
+
 #define EBPF_CLS_MASK 0x07
 #define EBPF_ALU_OP_MASK 0xf0
 

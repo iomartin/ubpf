@@ -27,7 +27,9 @@
 #define MAX_EXT_FUNCS 64
 
 static bool validate(const struct ubpf_vm *vm, const struct ebpf_inst *insts, uint32_t num_insts, char **errmsg);
-static bool bounds_check(const struct ubpf_vm *vm, void *addr, int size, const char *type, uint16_t cur_pc, void *mem, size_t mem_len, void *stack);
+static bool bounds_check(const struct ubpf_vm *vm, void *addr, int size,
+    const char *type, uint16_t cur_pc, void *mem[EBPF_ARGS_REGS_NUM],
+    size_t mem_len[EBPF_ARGS_REGS_NUM], void *stack);
 
 bool toggle_bounds_check(struct ubpf_vm *vm, bool enable)
 {
@@ -135,19 +137,22 @@ u32(uint64_t x)
 }
 
 uint64_t
-ubpf_exec(const struct ubpf_vm *vm, void *mem, size_t mem_len)
+ubpf_exec(const struct ubpf_vm *vm, void *mems[EBPF_ARGS_REGS_NUM],
+          size_t mem_lens[EBPF_ARGS_REGS_NUM])
 {
     uint16_t pc = 0;
     const struct ebpf_inst *insts = vm->insts;
     uint64_t reg[16];
     uint64_t stack[(STACK_SIZE+7)/8];
+    int i;
 
     if (!insts) {
         /* Code must be loaded before we can execute */
         return UINT64_MAX;
     }
 
-    reg[1] = (uintptr_t)mem;
+    for (i = 0; i < EBPF_ARGS_REGS_NUM; i++)
+            reg[i + 1] = (uintptr_t)mems[i];
     reg[10] = (uintptr_t)stack + sizeof(stack);
 
     while (1) {
@@ -374,13 +379,13 @@ ubpf_exec(const struct ubpf_vm *vm, void *mem, size_t mem_len)
          */
 #define BOUNDS_CHECK_LOAD(size) \
     do { \
-        if (!bounds_check(vm, (void *)reg[inst.src] + inst.offset, size, "load", cur_pc, mem, mem_len, stack)) { \
+        if (!bounds_check(vm, (void *)reg[inst.src] + inst.offset, size, "load", cur_pc, mems, mem_lens, stack)) { \
             return UINT64_MAX; \
         } \
     } while (0)
 #define BOUNDS_CHECK_STORE(size) \
     do { \
-        if (!bounds_check(vm, (void *)reg[inst.dst] + inst.offset, size, "store", cur_pc, mem, mem_len, stack)) { \
+        if (!bounds_check(vm, (void *)reg[inst.dst] + inst.offset, size, "store", cur_pc, mems, mem_lens, stack)) { \
             return UINT64_MAX; \
         } \
     } while (0)
@@ -740,19 +745,30 @@ validate(const struct ubpf_vm *vm, const struct ebpf_inst *insts, uint32_t num_i
 }
 
 static bool
-bounds_check(const struct ubpf_vm *vm, void *addr, int size, const char *type, uint16_t cur_pc, void *mem, size_t mem_len, void *stack)
+bounds_check(const struct ubpf_vm *vm, void *addr, int size, const char *type,
+             uint16_t cur_pc, void *mem[EBPF_ARGS_REGS_NUM],
+             size_t mem_len[EBPF_ARGS_REGS_NUM], void *stack)
 {
+    int i = 0;
+
     if (!vm->bounds_check_enabled)
         return true;
-    if (mem && (addr >= mem && (addr + size) <= (mem + mem_len))) {
-        /* Context access */
-        return true;
-    } else if (addr >= stack && (addr + size) <= (stack + STACK_SIZE)) {
+
+    for (i = 0; i < EBPF_ARGS_REGS_NUM; i++) {
+            if (mem[i] && (addr >= mem[i] && (addr + size) <= (mem[i] + mem_len[i]))) {
+                /* Context access */
+                return true;
+            }
+    }
+
+    if (addr >= stack && (addr + size) <= (stack + STACK_SIZE)) {
         /* Stack access */
         return true;
     } else {
         fprintf(stderr, "uBPF error: out of bounds memory %s at PC %u, addr %p, size %d\n", type, cur_pc, addr, size);
-        fprintf(stderr, "mem %p/%zd stack %p/%d\n", mem, mem_len, stack, STACK_SIZE);
+        for (i = 0; i < EBPF_ARGS_REGS_NUM; i++)
+                fprintf(stderr, "mem[%d] %p/%zd ", i, mem[i], mem_len[i]);
+        fprintf(stderr, "stack %p/%d\n", stack, STACK_SIZE);
         return false;
     }
 }

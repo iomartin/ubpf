@@ -51,15 +51,23 @@ int main(int argc, char **argv)
         { .name = "register-offset", .val = 'r', .has_arg=1 },
         { }
     };
+    int nmems = 0;
 
-    const char *mem_filename = NULL;
+    const char *mem_filenames[EBPF_ARGS_REGS_NUM];
+    memset(mem_filenames, 0, EBPF_ARGS_REGS_NUM * sizeof(char *));
     bool jit = false;
 
     int opt;
     while ((opt = getopt_long(argc, argv, "hm:jr:", longopts, NULL)) != -1) {
         switch (opt) {
         case 'm':
-            mem_filename = optarg;
+            if (nmems < EBPF_ARGS_REGS_NUM) {
+                mem_filenames[nmems++] = optarg;
+            } else {
+                fprintf(stderr, "--mem can be used up to %d times\n",
+                        EBPF_ARGS_REGS_NUM);
+                return 1;
+            }
             break;
         case 'j':
             jit = true;
@@ -88,13 +96,19 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    size_t mem_len = 0;
-    void *mem = NULL;
-    if (mem_filename != NULL) {
-        mem = readfile(mem_filename, 1024*1024, &mem_len);
-        if (mem == NULL) {
-            return 1;
+    size_t mem_lens[EBPF_ARGS_REGS_NUM];
+    void *mems[EBPF_ARGS_REGS_NUM];
+    memset(mems, 0, EBPF_ARGS_REGS_NUM * sizeof(void *));
+    memset(mem_lens, 0, EBPF_ARGS_REGS_NUM * sizeof(size_t));
+    while (nmems > 0) {
+        if (mem_filenames[nmems - 1] != NULL) {
+            mems[nmems - 1]= readfile(mem_filenames[nmems - 1], 1024*1024,
+                                      &mem_lens[nmems - 1]);
+            if (mems[nmems - 1] == NULL) {
+                return 1;
+            }
         }
+        nmems--;
     }
 
     struct ubpf_vm *vm = ubpf_create();
@@ -137,9 +151,9 @@ int main(int argc, char **argv)
             free(errmsg);
             return 1;
         }
-        ret = fn(mem, mem_len);
+        ret = fn(mems[0], mem_lens[0]);
     } else {
-        ret = ubpf_exec(vm, mem, mem_len);
+        ret = ubpf_exec(vm, mems, mem_lens);
     }
 
     printf("0x%"PRIx64"\n", ret);
